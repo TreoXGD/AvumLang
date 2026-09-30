@@ -101,8 +101,7 @@ pub const Interpreter = struct {
             .float => |f| try self.pushActive(.{ .float = f }),
             .bool => |b| try self.pushActive(.{ .bool = b }),
             .string => |s| {
-                const gc_value: GcObjectValue = .{ .string = s };
-                const gc_object = try self.gc.allocObject(gc_value);
+                const gc_object = try self.gc.getOrCreateString(s);
 
                 try self.pushActive(.{ .object = gc_object });
             },

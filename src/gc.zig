@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Aligned = std.array_list.Aligned;
+const StringHashMap = std.hash_map.StringHashMap;
 
 const Value = @import("./value.zig").Value;
 const GcObject = @import("./value.zig").GcObject;
@@ -10,8 +11,10 @@ const EvalError = @import("./errors.zig").EvalError;
 
 // standard mark and sweep garbage collector
 pub const GC = struct {
-    // debug for now to get all bugs sorted out
     allocator: Allocator,
+    // contains references of string objects
+    string_pool: StringHashMap(*GcObject),
+    // contains all object references used for marking and sweeping
     obj_list: Aligned(*GcObject, null) = .empty,
     obj_count: usize = 0,
     obj_threshold: usize = 128,
@@ -19,6 +22,7 @@ pub const GC = struct {
     pub fn init(allocator: Allocator) GC {
         return .{
             .allocator = allocator,
+            .string_pool = StringHashMap(*GcObject).init(allocator),
         };
     }
 
@@ -27,6 +31,18 @@ pub const GC = struct {
             obj.deinit(self.allocator);
         }
         self.obj_list.deinit(self.allocator);
+        self.string_pool.deinit();
+    }
+
+    pub fn getOrCreateString(self: *GC, str: []const u8) !*GcObject {
+        const get_result = try self.string_pool.getOrPut(str);
+        if (get_result.found_existing) {
+            return get_result.value_ptr.*;
+        }
+
+        const gc_object = try self.allocObject(.{ .string = str });
+        get_result.value_ptr.* = gc_object;
+        return gc_object;
     }
 
     pub fn allocObject(self: *GC, gc_value: GcObjectValue) EvalError!*GcObject {
@@ -78,6 +94,8 @@ pub const GC = struct {
             if (is_marked) {
                 obj.is_marked = false;
             } else {
+                if (obj.value == .string) _ = self.string_pool.remove(obj.value.string);
+
                 obj.deinit(self.allocator);
                 _ = self.obj_list.swapRemove(i);
             }
