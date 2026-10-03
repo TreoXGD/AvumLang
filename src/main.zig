@@ -13,39 +13,46 @@ const LexError = @import("./errors.zig").LexError;
 const EvalError = @import("./errors.zig").EvalError;
 
 fn repl(init: std.process.Init) !void {
-    const gpa: Allocator = init.gpa;
     const io = init.io;
+
+    const gpa: Allocator = init.gpa;
+
+    var arena_allocator = init.arena;
+    const arena = arena_allocator.allocator();
+
     // stdout
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_file_writer: Io.File.Writer = .init(.stdout(), io, &stdout_buffer);
     const stdout = &stdout_file_writer.interface;
+
     // stderr
     var stderr_buffer: [1024]u8 = undefined;
     var stderr_file_writer: Io.File.Writer = .init(.stderr(), io, &stderr_buffer);
     const stderr = &stderr_file_writer.interface;
+
     // stdin
     var stdin_buffer: [1024]u8 = undefined;
     const stdin_file = Io.File.stdin();
-    const is_tty = stdin_file.isTty(io) catch false;
     var stdin_file_reader: Io.File.Reader = .init(stdin_file, io, &stdin_buffer);
     const stdin = &stdin_file_reader.interface;
 
-    var lexer = Lexer{ .allocator = gpa };
+    const is_tty = stdin_file.isTty(io) catch false;
+
+    var lexer = Lexer{};
     var interpreter = try Interpreter.init(gpa, stdout);
     defer interpreter.deinit();
 
     loop: while (true) {
+        defer _ = arena_allocator.reset(.free_all);
+
         // prompt part
-        const prompt_string: u8 = if (interpreter.block_level != 0 or interpreter.frame_stack.items.len > 1) '<' else '#';
-        if (is_tty) try stdout.print("{c} ", .{prompt_string});
+        if (is_tty) {
+            const prompt_string: u8 = if (interpreter.block_level != 0 or interpreter.frame_stack.items.len > 1) '<' else '#';
+            try stdout.print("{c} ", .{prompt_string});
+        }
 
         try stdout.flush();
         const prompt = try stdin.takeDelimiter('\n') orelse break :loop;
-
-        // per-line arena for temp allocations
-        var arena_allocator = std.heap.ArenaAllocator.init(gpa);
-        defer arena_allocator.deinit();
-        const arena = arena_allocator.allocator();
 
         // reading
         var token_list = lexer.lex(prompt, arena) catch |err| {
@@ -97,13 +104,7 @@ fn repl(init: std.process.Init) !void {
             try stdout.flush();
         }
 
-        if (interpreter.gc.obj_list.items.len > interpreter.gc.obj_threshold) {
-            interpreter.gcTryCollect();
-
-            interpreter.gc.obj_threshold = interpreter.gc.obj_list.items.len * 2;
-
-            if (interpreter.gc.obj_threshold < 128) interpreter.gc.obj_threshold = 128;
-        }
+        interpreter.gcMaybeCollect();
     }
 }
 

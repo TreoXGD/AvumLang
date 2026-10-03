@@ -53,20 +53,12 @@ pub const Interpreter = struct {
         self.frame_stack.deinit(self.allocator);
 
         // deallocate the variable dictionary
-        self.deinitVars();
         self.var_dict.deinit(self.allocator);
 
         // deallocate any in-progress blocks
         self.block_contents.deinit(self.allocator);
 
         self.gc.deinit();
-    }
-
-    fn deinitVars(self: *Interpreter) void {
-        var iterator = self.var_dict.iterator();
-        while (iterator.next()) |entry| {
-            self.allocator.free(entry.key_ptr.*);
-        }
     }
 
     fn evalBlock(self: *Interpreter, token: Token) EvalError!void {
@@ -86,8 +78,21 @@ pub const Interpreter = struct {
 
             try self.pushActive(.{ .object = gc_object });
         } else {
-            try self.block_contents.append(self.allocator, token);
+            try self.block_contents.append(self.allocator, try self.preserveToken(token));
         }
+    }
+
+    fn preserveToken(self: *Interpreter, token: Token) EvalError!Token {
+        return switch (token) {
+            .string => |s| .{ .string = try self.getGCText(s) },
+            .set_var => |s| .{ .set_var = try self.getGCText(s) },
+            .get_var => |s| .{ .get_var = try self.getGCText(s) },
+            else => token,
+        };
+    }
+
+    fn getGCText(self: *Interpreter, text: []const u8) EvalError![]const u8 {
+        return (try self.gc.getOrCreateString(text)).value.string;
     }
 
     pub fn eval(self: *Interpreter, token: Token) EvalError!void {
@@ -107,7 +112,7 @@ pub const Interpreter = struct {
             },
             .set_var => |ident| {
                 const value = try self.popOrError();
-                try self.var_dict.put(self.allocator, ident, value);
+                try self.var_dict.put(self.allocator, try self.getGCText(ident), value);
             },
             .get_var => |ident| {
                 if (self.var_dict.get(ident)) |value| {
@@ -374,7 +379,6 @@ pub const Interpreter = struct {
                         }
                     },
                     .varclear => {
-                        self.deinitVars();
                         self.var_dict.clearRetainingCapacity();
                     },
                     .nl => try self.writer.print("\n", .{}),
@@ -550,16 +554,28 @@ pub const Interpreter = struct {
         // mark stack objects
         for (self.frame_stack.items) |frame| {
             for (frame.items) |val| {
-                GC.markValue(val);
+                self.gc.markValue(val);
             }
         }
+
         // marks variable objects
-        const values = self.var_dict.values();
-        for (values) |val| {
-            GC.markValue(val);
-        }
+        for (self.var_dict.keys()) |name| self.gc.markText(name);
+        for (self.var_dict.values()) |val| self.gc.markValue(val);
+
+        // marks current block
+        for (self.block_contents.items) |token| self.gc.markToken(token);
 
         self.gc.sweepObjects();
+    }
+
+    pub fn gcMaybeCollect(self: *Interpreter) void {
+        if (self.gc.obj_list.items.len > self.gc.obj_threshold) {
+            self.gcTryCollect();
+
+            self.gc.obj_threshold = self.gc.obj_list.items.len * 2;
+
+            if (self.gc.obj_threshold < 128) self.gc.obj_threshold = 128;
+        }
     }
 
     fn beginFrame(self: *Interpreter) EvalError!void {

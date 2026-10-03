@@ -81,19 +81,7 @@ pub const GcObject = struct {
     is_marked: bool,
 
     pub fn deinit(self: *GcObject, allocator: Allocator) void {
-        // does not need to have child elements freed since the GC frees them either way
-        switch (self.value) {
-            .array => |a| allocator.free(a),
-            .string => |s| allocator.free(s),
-            .block => |b| {
-                // need to deallocate unused strings before deallocating the block itself
-                for (b) |tk| {
-                    if (tk == .string) allocator.free(tk.string);
-                }
-                allocator.free(b);
-            },
-        }
-
+        self.value.deinit(allocator);
         allocator.destroy(self);
     }
 
@@ -149,4 +137,13 @@ pub const GcObjectValue = union(enum) {
     array: []Value,
     string: []const u8,
     block: []Token,
+
+    pub fn deinit(self: GcObjectValue, allocator: Allocator) void {
+        // does not need to have child elements freed since the GC frees them either way
+        switch (self) {
+            .array => |a| allocator.free(a),
+            .string => |s| allocator.free(s),
+            .block => |b| allocator.free(b),
+        }
+    }
 };
