@@ -16,7 +16,7 @@ zig build test   # run the test suite
 It's stack-based: push numbers, then apply operators. Instead of `3 + 4` you write:
 
 ```
-# 3 4 + print
+# 3 4 + debug
 > 7
 ```
 
@@ -82,14 +82,14 @@ There's also `:name`, which is shorthand for `@name call`. Saves typing the same
 `{ ... }` doesn't run what's inside it, and instead packages the tokens up into a value and pushes that. `call` is what actually runs a block:
 
 ```
-{ 2 1 + } call print
+{ 2 1 + } call debug
 > 3
 ```
 
 `if` and `ifelse` are basically `call` with a condition attached. Pop a bool first, then run whichever block(s) fit:
 
 ```
-5 3 > { 100 } { -100 } ifelse print
+5 3 > { 100 } { -100 } ifelse debug
 > 100
 ```
 
@@ -98,7 +98,7 @@ There's also `:name`, which is shorthand for `@name call`. Saves typing the same
 ```
 5 $i
 { @i 0 > }             ; condition
-{ @i print @i 1 - $i}  ; body
+{ @i print nl @i 1 - $i}  ; body
 while
 ```
 
@@ -106,7 +106,7 @@ Since a block is just a value like anything else, you can stash one in a variabl
 
 ```
 { dup 0 == { drop 1 } { dup 1 - :fact * } ifelse } $fact
-3 :fact print
+3 :fact debug
 > 6
 ```
 
@@ -127,7 +127,8 @@ rot    - moves the third-from-top to the top
 ## Everything else
 
 ```
-print      - pops and prints the top
+debug      - pops and prints the top on a separate line with new line character after
+print      - pops and prints the top without any additional characters
 peek       - prints the top without popping it
 stack      - prints the whole stack, top to bottom
 clear      - empties the stack

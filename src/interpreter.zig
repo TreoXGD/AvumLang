@@ -248,6 +248,8 @@ pub const Interpreter = struct {
                         const value = try self.popOrError();
                         const elem_count = try (try self.popOrError()).isInteger();
 
+                        if (elem_count < 0) return EvalError.NegativeArraySize;
+
                         const count: usize = @intCast(elem_count);
 
                         const array: GcObjectValue = .{ .array = try self.allocator.alloc(Value, count) };

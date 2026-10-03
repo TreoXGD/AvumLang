@@ -96,6 +96,7 @@ fn repl(init: std.process.Init) !void {
                     EvalError.AccessOutsideArrayBounds => stderr.writeAll("Unable to get an element of array with index outside of array.\n"),
                     EvalError.CallStackOverflow => stderr.writeAll("Got over maximum allowed recursive calls.\n"),
                     EvalError.BlockLeftWrongElementCount => stderr.writeAll("Unable to properly operate an array with different count of results than needed.\n"),
+                    EvalError.NegativeArraySize => stderr.writeAll("Array element count can only be created with non-negative numbers.\n"),
                     EvalError.Quit => break :loop,
                 };
                 try stderr.flush();
