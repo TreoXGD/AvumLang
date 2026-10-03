@@ -48,7 +48,7 @@ pub const GC = struct {
         errdefer gc_value.deinit(self.allocator);
 
         const gc_object = try self.allocator.create(GcObject);
-        errdefer gc_object.deinit(self.allocator);
+        errdefer self.allocator.destroy(gc_object);
 
         gc_object.* = .{
             .value = gc_value,

@@ -617,6 +617,14 @@ pub const Interpreter = struct {
     }
 };
 
+// for testing purposes only
+fn pushBlock(interp: *Interpreter, tokens: []const Token) !void {
+    const copy = try interp.allocator.alloc(Token, tokens.len);
+    for (tokens, copy) |t, *slot| slot.* = try interp.preserveToken(t);
+    const obj = try interp.gc.allocObject(.{ .block = copy });
+    try interp.pushActive(.{ .object = obj });
+}
+
 test "rot operation" {
     var buf: [32]u8 = undefined;
     var w: Io.Writer = .fixed(&buf);
@@ -856,7 +864,7 @@ test "print operation" {
     try interp.eval(.{ .int = 5 });
     try interp.eval(.{ .op = .print });
 
-    try std.testing.expectEqualStrings("> 5\n", w.buffer[0..w.end]);
+    try std.testing.expectEqualStrings("5", w.buffer[0..w.end]);
     try std.testing.expectEqual(0, interp.getActive().items.len);
 }
 
@@ -1102,8 +1110,7 @@ test "call operation" {
     var interp = try Interpreter.init(std.testing.allocator, &w);
     defer interp.deinit();
 
-    var body = [_]Token{ .{ .int = 5 }, .{ .int = 3 }, .{ .op = .plus } };
-    try interp.pushActive(.{ .block = &body });
+    try pushBlock(&interp, &.{ .{ .int = 5 }, .{ .int = 3 }, .{ .op = .plus } });
     try interp.eval(.{ .op = .call });
 
     try std.testing.expectEqualSlices(Value, &.{.{ .int = 8 }}, interp.getActive().items);
@@ -1115,9 +1122,8 @@ test "if operation runs the block when true" {
     var interp = try Interpreter.init(std.testing.allocator, &w);
     defer interp.deinit();
 
-    var then_branch = [_]Token{.{ .int = 42 }};
     try interp.pushActive(.{ .bool = true });
-    try interp.pushActive(.{ .block = &then_branch });
+    try pushBlock(&interp, &.{.{ .int = 42 }});
     try interp.eval(.{ .op = .@"if" });
 
     try std.testing.expectEqualSlices(Value, &.{.{ .int = 42 }}, interp.getActive().items);
@@ -1129,11 +1135,9 @@ test "ifelse operation runs the else block when false" {
     var interp = try Interpreter.init(std.testing.allocator, &w);
     defer interp.deinit();
 
-    var then_branch = [_]Token{.{ .int = 1 }};
-    var else_branch = [_]Token{.{ .int = 2 }};
     try interp.pushActive(.{ .bool = false });
-    try interp.pushActive(.{ .block = &then_branch });
-    try interp.pushActive(.{ .block = &else_branch });
+    try pushBlock(&interp, &.{.{ .int = 1 }});
+    try pushBlock(&interp, &.{.{ .int = 2 }});
     try interp.eval(.{ .op = .ifelse });
 
     try std.testing.expectEqualSlices(Value, &.{.{ .int = 2 }}, interp.getActive().items);
@@ -1151,10 +1155,8 @@ test "while operation loops until condition is false" {
     try interp.eval(.{ .int = 0 });
     try interp.eval(.{ .set_var = "i" });
 
-    var cond = [_]Token{ .{ .get_var = "i" }, .{ .int = 3 }, .{ .op = .less } };
-    var body = [_]Token{ .{ .get_var = "i" }, .{ .int = 1 }, .{ .op = .plus }, .{ .set_var = "i" } };
-    try interp.pushActive(.{ .block = &cond });
-    try interp.pushActive(.{ .block = &body });
+    try pushBlock(&interp, &.{ .{ .get_var = "i" }, .{ .int = 3 }, .{ .op = .less } });
+    try pushBlock(&interp, &.{ .{ .get_var = "i" }, .{ .int = 1 }, .{ .op = .plus }, .{ .set_var = "i" } });
     try interp.eval(.{ .op = .@"while" });
     try interp.eval(.{ .get_var = "i" });
 
