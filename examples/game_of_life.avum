@@ -1,0 +1,134 @@
+; get cell from board with a coordinate point
+{ ; [ array x y ]
+	rot
+	rot
+	get
+	swap
+	get
+} $get2d
+
+[ [ 0 1 ] [ 1 0 ] [ 0 -1 ] [ -1 0 ] [ 1 1 ] [ -1 -1 ] [ 1 -1 ] [ -1 1 ] ] $directions
+
+; finds the next generation of game of life board
+{
+	; initialize length and width of the board
+	@board len $m
+	@board 0 get len $n
+
+	; iterate over the board
+	0 $i
+	{ @i @m < }
+	{
+		; inner loop
+		0 $j
+		{ @j @n < }
+		{
+			; loop over all directions to find count of live cells near currently looped cell
+			0 $live
+			
+			0 $k
+			{ @k @directions len < }
+			{
+				@i @directions @k 0 :get2d + @m + @m % $x
+				@j @directions @k 1 :get2d + @n + @n % $y
+
+				@board @x @y :get2d 1 == @board @x @y :get2d 3 == ||
+				{ @live 1 + $live }
+				if
+
+				@k 1 + $k
+			}
+			while
+
+			; update the cell with temporary value
+			@board @i @j :get2d 1 == @live 2 < @live 3 > || &&
+			{ @board @i get @j 3 set }
+			{
+				@board @i @j :get2d 0 == @live 3 == &&
+				{ @board @i get @j 2 set }
+				if
+			}
+			ifelse
+
+			@j 1 + $j
+		}
+		while
+
+		@i 1 + $i
+	}
+	while
+
+	; update the matrix
+	0 $i
+	{ @i @m < }
+	{
+		; inner loop
+		0 $j
+		{ @j @n < }
+		{
+			; change the temporary values to actual ones
+			@board @i @j :get2d 2 ==
+			{ @board @i get @j 1 set }
+			if
+
+			@board @i @j :get2d 3 ==
+			{ @board @i get @j 0 set }
+			if
+
+			@j 1 + $j
+		}
+		while
+
+		@i 1 + $i
+	}
+	while
+} $findNextGen
+
+{
+	$row
+
+	0 $j
+	{ @j @row len < }
+	{
+		@row @j get 1 ==
+		{ "# " print }
+		{ "· " print }
+		ifelse
+	
+		@j 1 + $j
+	}
+	while
+
+	nl
+} $printRow
+
+{
+	0 $i
+	{ @i @board len < }
+	{
+		@board @i get :printRow
+		@i 1 + $i
+	}
+	while
+	nl
+} $printBoard
+
+[
+[ 0 1 0 0 1 0 1 0 1 0 ]
+[ 0 0 0 0 1 0 1 1 1 0 ]
+[ 1 0 1 1 0 1 0 0 1 0 ]
+[ 0 1 0 0 1 0 1 1 0 1 ]
+[ 1 0 0 1 0 1 0 0 1 0 ]
+[ 0 1 1 0 1 0 1 1 0 1 ]
+[ 0 0 0 1 0 0 1 0 1 1 ]
+[ 1 1 1 0 1 1 0 1 0 0 ]
+[ 0 0 0 1 0 1 0 0 1 0 ]
+[ 1 1 1 0 1 0 1 1 0 1 ]
+] $board
+
+{ 0 0 == }
+{
+	:findNextGen
+	:printBoard
+}
+while
