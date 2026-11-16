@@ -45,59 +45,28 @@ pub const Lexer = struct {
                         while (!self.isAtEnd() and self.peekAt(0) != '\n') self.index += 1;
                         continue :state .start;
                     },
-                    ':' => {
-                        if (self.isAtEnd() or !std.ascii.isAlphabetic(self.peekAt(0))) return LexError.CallVarWithoutValidVar;
+                    ':', '@', '$' => |prefix| {
+                        const ident = try self.lexVarIdent(switch (prefix) {
+                            ':' => LexError.CallVarWithoutValidVar,
+                            '@' => LexError.GetVarWithoutValidVar,
+                            '$' => LexError.SetVarWithoutValidVar,
+                            else => unreachable,
+                        });
 
-                        const start_index = self.index;
-                        while (!self.isAtEnd() and std.ascii.isAlphanumeric(self.peekAt(0))) self.index += 1;
-
-                        const ident = self.text[start_index..self.index];
-
-                        // syntactic sugar: :(ident) => @(ident) call
-                        try token_list.append(arena, .{ .get_var = ident });
-                        try token_list.append(arena, .{ .op = .call });
-                        continue :state .start;
-                    },
-                    '@' => {
-                        if (self.isAtEnd() or !std.ascii.isAlphabetic(self.peekAt(0))) return LexError.GetVarWithoutValidVar;
-
-                        const start_index = self.index;
-                        while (!self.isAtEnd() and std.ascii.isAlphanumeric(self.peekAt(0))) self.index += 1;
-
-                        const ident = self.text[start_index..self.index];
-
-                        try token_list.append(arena, .{ .get_var = ident });
-
-                        continue :state .start;
-                    },
-                    '$' => {
-                        if (self.isAtEnd() or !std.ascii.isAlphabetic(self.peekAt(0))) return LexError.SetVarWithoutValidVar;
-
-                        const start_index = self.index;
-                        while (!self.isAtEnd() and std.ascii.isAlphanumeric(self.peekAt(0))) self.index += 1;
-
-                        const ident = self.text[start_index..self.index];
-
-                        try token_list.append(arena, .{ .set_var = ident });
-
-                        continue :state .start;
-                    },
-                    '\"' => {
-                        if (self.isAtEnd()) return LexError.UnclosedString;
-
-                        const start_index = self.index;
-                        while (!self.isAtEnd() and self.peekAt(0) != '\"') {
-                            if (self.peekAt(0) == '\n') return LexError.UnclosedString;
-                            self.index += 1;
+                        switch (prefix) {
+                            ':' => {
+                                // syntactic sugar: :(ident) => @(ident) call
+                                try token_list.append(arena, .{ .get_var = ident });
+                                try token_list.append(arena, .{ .op = .call });
+                            },
+                            '@' => try token_list.append(arena, .{ .get_var = ident }),
+                            '$' => try token_list.append(arena, .{ .set_var = ident }),
+                            else => unreachable,
                         }
-
-                        if (self.isAtEnd()) return LexError.UnclosedString;
-
-                        const string = self.text[start_index..self.index];
-
-                        // closing string
-                        self.index += 1;
-
+                        continue :state .start;
+                    },
+                    '"' => {
+                        const string = try self.lexString();
                         try token_list.append(arena, .{ .string = string });
                         continue :state .start;
                     },
@@ -107,27 +76,8 @@ pub const Lexer = struct {
                 }
             },
             .op => {
-                const op: OpType = switch (self.text[self.index - 1]) {
-                    '+' => .plus,
-                    '-' => .minus,
-                    '*' => .star,
-                    '/' => .slash,
-                    '%' => .percent,
-                    '{' => .left_brace,
-                    '}' => .right_brace,
-                    '[' => .left_bracket,
-                    ']' => .right_bracket,
-                    '<' => if (!self.isAtEnd() and self.matchAdvance('=')) .less_equal else .less,
-                    '>' => if (!self.isAtEnd() and self.matchAdvance('=')) .greater_equal else .greater,
-                    '=' => if (!self.isAtEnd() and self.matchAdvance('=')) .equal else return LexError.EqualWithoutSecondEqual,
-                    '!' => if (!self.isAtEnd() and self.matchAdvance('=')) .not_equal else .not,
-                    '&' => if (!self.isAtEnd() and self.matchAdvance('&')) .amp_amp else .amp,
-                    '|' => if (!self.isAtEnd() and self.matchAdvance('|')) .bar_bar else .bar,
-                    else => unreachable,
-                };
-
+                const op: OpType = try self.lexOp(self.text[self.index - 1]);
                 try token_list.append(arena, .{ .op = op });
-
                 continue :state .start;
             },
             .num => {
@@ -176,6 +126,59 @@ pub const Lexer = struct {
         }
 
         return token_list;
+    }
+
+    fn lexString(self: *Lexer) LexError![]const u8 {
+        if (self.isAtEnd()) return LexError.UnclosedString;
+
+        const start_index = self.index;
+        while (!self.isAtEnd() and self.peekAt(0) != '\"') {
+            if (self.peekAt(0) == '\n') return LexError.UnclosedString;
+            self.index += 1;
+        }
+
+        if (self.isAtEnd()) return LexError.UnclosedString;
+
+        const string = self.text[start_index..self.index];
+
+        // closing string
+        self.index += 1;
+
+        return string;
+    }
+
+    fn lexVarIdent(self: *Lexer, err: LexError) LexError![]const u8 {
+        if (self.isAtEnd() or !std.ascii.isAlphabetic(self.peekAt(0)) and self.peekAt(0) != '_') return err;
+
+        const start_index = self.index;
+        while (!self.isAtEnd() and isValidIdentChar(self.peekAt(0))) self.index += 1;
+
+        return self.text[start_index..self.index];
+    }
+
+    fn lexOp(self: *Lexer, op: u8) LexError!OpType {
+        return switch (op) {
+            '+' => .plus,
+            '-' => .minus,
+            '*' => .star,
+            '/' => .slash,
+            '%' => .percent,
+            '{' => .left_brace,
+            '}' => .right_brace,
+            '[' => .left_bracket,
+            ']' => .right_bracket,
+            '<' => if (!self.isAtEnd() and self.matchAdvance('=')) .less_equal else .less,
+            '>' => if (!self.isAtEnd() and self.matchAdvance('=')) .greater_equal else .greater,
+            '=' => if (!self.isAtEnd() and self.matchAdvance('=')) .equal else return LexError.EqualWithoutSecondEqual,
+            '!' => if (!self.isAtEnd() and self.matchAdvance('=')) .not_equal else .not,
+            '&' => if (!self.isAtEnd() and self.matchAdvance('&')) .amp_amp else .amp,
+            '|' => if (!self.isAtEnd() and self.matchAdvance('|')) .bar_bar else .bar,
+            else => unreachable,
+        };
+    }
+
+    fn isValidIdentChar(c: u8) bool {
+        return std.ascii.isAlphanumeric(c) or c == '_';
     }
 
     fn strToKeyword(str: []const u8) LexError!Token {

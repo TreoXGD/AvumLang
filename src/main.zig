@@ -62,9 +62,9 @@ fn repl(init: std.process.Init) !void {
                 LexError.Overflow => stderr.writeAll("The number was too big to store.\n"),
                 LexError.OutOfMemory => stderr.writeAll("The token list ran out of memory.\n"),
                 LexError.DecimalPointWithoutNumber => stderr.writeAll("The floating number must have at least 1 number after '.'\n"),
-                LexError.GetVarWithoutValidVar => stderr.writeAll("The '@' symbol should have at least one alphabetic character.\n"),
-                LexError.SetVarWithoutValidVar => stderr.writeAll("The '$' symbol should have at least one alphabetic character.\n"),
-                LexError.CallVarWithoutValidVar => stderr.writeAll("The ':' symbol should have at least one alphabetic character.\n"),
+                LexError.GetVarWithoutValidVar => stderr.writeAll("The '@' symbol should have at least one alphabetic or '_' character.\n"),
+                LexError.SetVarWithoutValidVar => stderr.writeAll("The '$' symbol should have at least one alphabetic or '_' character.\n"),
+                LexError.CallVarWithoutValidVar => stderr.writeAll("The ':' symbol should have at least one alphabetic or '_' character.\n"),
                 LexError.EqualWithoutSecondEqual => stderr.writeAll("The '=' symbol should have another '=' after itself.\n"),
                 LexError.UnclosedString => stderr.writeAll("A string must close itself on the same line.\n"),
             };
