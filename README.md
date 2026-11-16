@@ -4,7 +4,7 @@ A small reverse-polish, stack-based language with its own REPL, written in Zig f
 
 ## Building and running
 
-Built against Zig 0.16, anything lower will not work. No arguments are accepted right now.
+Built against Zig 0.17.1, anything lower will not work. No arguments are accepted right now.
 
 ```
 zig build run    # start the REPL
